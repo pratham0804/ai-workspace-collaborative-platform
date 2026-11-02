@@ -7,6 +7,7 @@ import protectedRouter from "./routes/protected.routes.js"
 import workspaceRouter from "./routes/workspace.routes.js"
 import boardRouter from "./routes/board.routes.js";
 import columnRouter from "./routes/column.routes.js";
+import taskRouter from "./routes/task.routes.js";
 
 import errorMiddleware from "./middleware/error.middleware.js"
 import { loggerMiddleware } from "./middleware/logger.middleware.js";
@@ -37,6 +38,7 @@ app.use("/api", protectedRouter);
 app.use("/api/workspace", workspaceRouter);
 app.use("/api", boardRouter);
 app.use("/api", columnRouter);
+app.use("/api", taskRouter);
 
 app.use("/api/identity",identityRouter);
 app.use("/oauth", oauthRouter);

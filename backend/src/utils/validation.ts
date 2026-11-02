@@ -43,3 +43,37 @@ export const updateColumnSchema = z.object({
     .min(2, "Column name must contain at least 2 characters")
     .max(100, "Column name cannot exceed 100 characters"),
 });
+
+
+export const createTaskSchema = z.object({
+  title: z
+    .string()
+    .min(1, "Task title is required")
+    .max(200, "Task title cannot exceed 200 characters"),
+
+  description: z
+    .string()
+    .max(5000, "Description cannot exceed 5000 characters")
+    .optional(),
+
+  priority: z
+    .enum(["LOW", "MEDIUM", "HIGH"])
+    .optional(),
+});
+
+export const updateTaskSchema = z.object({
+  title: z
+    .string()
+    .min(1, "Task title is required")
+    .max(200, "Task title cannot exceed 200 characters")
+    .optional(),
+
+  description: z
+    .string()
+    .max(5000, "Description cannot exceed 5000 characters")
+    .optional(),
+
+  priority: z
+    .enum(["LOW", "MEDIUM", "HIGH"])
+    .optional(),
+});
