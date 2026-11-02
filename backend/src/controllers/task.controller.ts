@@ -8,6 +8,7 @@ import {
   getTaskById,
   updateTask,
   deleteTask,
+  moveTask,
 } from "../services/task.service.js";
 
 async function validateHierarchy(
@@ -307,6 +308,96 @@ export async function deleteTaskController(
     return res.status(500).json({
       success: false,
       message: "Failed to delete task",
+    });
+  }
+}
+
+
+export async function moveTaskController(
+  req: Request,
+  res: Response
+) {
+  try {
+    const workspaceId = Number(req.params.workspaceId);
+    const boardId = Number(req.params.boardId);
+    const sourceColumnId = Number(req.params.columnId);
+    const taskId = Number(req.params.taskId);
+
+    const targetColumnId = req.body.targetColumnId;
+    const targetPosition = req.body.targetPosition;
+
+    const sourceColumn = await validateHierarchy(
+      workspaceId,
+      boardId,
+      sourceColumnId
+    );
+
+    if (!sourceColumn) {
+      return res.status(404).json({
+        success: false,
+        message: "Source column not found",
+      });
+    }
+
+    const task = await prisma.task.findFirst({
+      where: {
+        id: taskId,
+        columnId: sourceColumnId,
+      },
+    });
+
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found",
+      });
+    }
+
+    const targetColumn = await prisma.column.findFirst({
+      where: {
+        id: targetColumnId,
+        boardId,
+        board: {
+          workspaceId,
+        },
+      },
+    });
+
+    if (!targetColumn) {
+      return res.status(404).json({
+        success: false,
+        message: "Target column not found",
+      });
+    }
+
+    const movedTask = await moveTask(
+      taskId,
+      sourceColumnId,
+      targetColumnId,
+      targetPosition
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Task moved successfully",
+      data: movedTask,
+    });
+  } catch (error) {
+    console.error(error);
+
+    if (
+      error instanceof Error &&
+      error.message === "Invalid target position"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to move task",
     });
   }
 }

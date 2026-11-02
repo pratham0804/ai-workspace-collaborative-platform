@@ -77,3 +77,9 @@ export const updateTaskSchema = z.object({
     .enum(["LOW", "MEDIUM", "HIGH"])
     .optional(),
 });
+
+
+export const moveTaskSchema = z.object({
+  targetColumnId: z.number().int().positive("Invalid target column ID"),
+  targetPosition: z.number().int().min(0, "Position cannot be negative"),
+});

@@ -6,6 +6,7 @@ import {
   getTaskController,
   updateTaskController,
   deleteTaskController,
+  moveTaskController,
 } from "../controllers/task.controller.js";
 
 import { authMiddleware } from "../middleware/auth.middleware.js";
@@ -19,6 +20,7 @@ import { validate } from "../middleware/validate.middleware.js";
 import {
   createTaskSchema,
   updateTaskSchema,
+  moveTaskSchema,
 } from "../utils/validation.js";
 
 const router = Router();
@@ -43,6 +45,14 @@ router.get(
   authMiddleware,
   requireWorkspaceMember,
   getTaskController
+);
+
+router.patch(
+  "/workspaces/:workspaceId/boards/:boardId/columns/:columnId/tasks/:taskId/move",
+  authMiddleware,
+  requireWorkspaceMember,
+  validate(moveTaskSchema),
+  moveTaskController
 );
 
 router.patch(
