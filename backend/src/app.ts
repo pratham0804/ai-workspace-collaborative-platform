@@ -1,15 +1,18 @@
 import express from "express";
 import healthRouter from "./routes/health.routes.js"
 import dbRouter from "./routes/db.routes.js"
+import oauthRouter from "./routes/oauth.routes.js"
+import identityRouter from "./routes/identity.routes.js";
+import protectedRouter from "./routes/protected.routes.js"
+import workspaceRouter from "./routes/workspace.routes.js"
+import boardRouter from "./routes/board.routes.js";
+
 import errorMiddleware from "./middleware/error.middleware.js"
 import { loggerMiddleware } from "./middleware/logger.middleware.js";
-import identityRouter from "./routes/identity.routes.js";
-import cookieParser from "cookie-parser";
-import oauthRouter from "./routes/oauth.routes.js"
-import protectedRouter from "./routes/protected.routes.js"
 import { sessionMiddleware } from "./middleware/session.middleware.js";
-import workspaceRouter from "./routes/workspace.routes.js"
+
 import cors from "cors";
+import cookieParser from "cookie-parser";
 
 
 const app = express();
@@ -31,6 +34,8 @@ app.use("/api", healthRouter);
 app.use("/api", dbRouter);
 app.use("/api", protectedRouter);
 app.use("/api/workspace", workspaceRouter);
+app.use("/api", boardRouter);
+
 
 app.use("/api/identity",identityRouter);
 app.use("/oauth", oauthRouter);

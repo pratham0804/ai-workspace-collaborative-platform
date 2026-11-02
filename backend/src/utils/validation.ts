@@ -13,3 +13,18 @@ export const createWorkspaceSchema = z.object({
     .min(2, "Workspace name must contain at least 2 characters")
     .max(100, "Workspace name cannot exceed 100 characters"),
 });
+
+
+export const createBoardSchema = z.object({
+  name: z
+    .string()
+    .min(2, "Board name must contain at least 2 characters")
+    .max(100, "Board name cannot exceed 100 characters"),
+});
+
+export const updateBoardSchema = z.object({
+  name: z
+    .string()
+    .min(2, "Board name must contain at least 2 characters")
+    .max(100, "Board name cannot exceed 100 characters"),
+});
