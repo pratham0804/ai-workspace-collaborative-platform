@@ -1,4 +1,4 @@
-import { User } from "@prisma/client";
+import { User, type WorkspaceMember } from "@prisma/client";
 
 
 declare global {
@@ -6,6 +6,7 @@ declare global {
     interface Request {
       user?: User;
       auth?: string | object;
+      workspaceMembership? : WorkspaceMember;
       
     }
   }

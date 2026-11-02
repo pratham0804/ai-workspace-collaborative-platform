@@ -7,6 +7,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
 model User {
   id           Int    @id @default(autoincrement())
   name         String
@@ -18,6 +24,9 @@ model User {
 
   sessions           Session[]
   authorizationCodes AuthorizationCode[]
+
+  ownedWorkspaces  Workspace[]
+  workspaceMembers WorkspaceMember[]
 }
 
 model Session {
@@ -60,4 +69,83 @@ model AuthorizationCode {
   @@index([oauthClientId])
   @@index([userId])
   @@index([expiresAt])
+}
+
+model Workspace {
+  id      Int    @id @default(autoincrement())
+  name    String
+  ownerId Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner   User              @relation(fields: [ownerId], references: [id])
+  members WorkspaceMember[]
+  boards  Board[]
+
+  @@index([ownerId])
+}
+
+model WorkspaceMember {
+  id          Int           @id @default(autoincrement())
+  workspaceId Int
+  userId      Int
+  role        WorkspaceRole @default(MEMBER)
+
+  createdAt DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model Board {
+  id          Int    @id @default(autoincrement())
+  name        String
+  workspaceId Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  columns   Column[]
+
+  @@index([workspaceId])
+}
+
+model Column {
+  id       Int    @id @default(autoincrement())
+  name     String
+  boardId  Int
+  position Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  board Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  tasks Task[]
+
+  @@unique([boardId, position])
+  @@index([boardId])
+}
+
+model Task {
+  id          Int     @id @default(autoincrement())
+  title       String
+  description String?
+
+  columnId Int
+  position Int
+
+  priority String @default("MEDIUM")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  column Column @relation(fields: [columnId], references: [id], onDelete: Cascade)
+
+  @@unique([columnId, position])
+  @@index([columnId])
 }
