@@ -28,3 +28,18 @@ export const updateBoardSchema = z.object({
     .min(2, "Board name must contain at least 2 characters")
     .max(100, "Board name cannot exceed 100 characters"),
 });
+
+
+export const createColumnSchema = z.object({
+  name: z
+    .string()
+    .min(2, "Column name must contain at least 2 characters")
+    .max(100, "Column name cannot exceed 100 characters"),
+});
+
+export const updateColumnSchema = z.object({
+  name: z
+    .string()
+    .min(2, "Column name must contain at least 2 characters")
+    .max(100, "Column name cannot exceed 100 characters"),
+});
