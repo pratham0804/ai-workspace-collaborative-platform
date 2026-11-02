@@ -27,6 +27,9 @@ model User {
 
   ownedWorkspaces  Workspace[]
   workspaceMembers WorkspaceMember[]
+
+  taskHistories TaskHistory[]
+  comments      Comment[]
 }
 
 model Session {
@@ -146,6 +149,50 @@ model Task {
 
   column Column @relation(fields: [columnId], references: [id], onDelete: Cascade)
 
+  history  TaskHistory[]
+  comments Comment[]
+
   @@unique([columnId, position])
   @@index([columnId])
+}
+
+model TaskHistory {
+  id Int @id @default(autoincrement())
+
+  taskId Int
+  userId Int
+
+  action String
+
+  fromColumnId Int?
+  toColumnId   Int?
+
+  details String?
+
+  createdAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Comment {
+  id Int @id @default(autoincrement())
+
+  content String
+
+  taskId Int
+  userId Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([userId])
 }
