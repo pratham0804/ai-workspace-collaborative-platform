@@ -133,11 +133,46 @@ export function loginPage(req: Request, res: Response) {
     <html>
       <head>
         <title>Identity Provider Login</title>
+        <style>
+          body {
+            font-family: system-ui, sans-serif;
+            background: #f4f5f7;
+            color: #172b4d;
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+          }
+          form {
+            background: #fff;
+            padding: 24px;
+            border-radius: 8px;
+            min-width: 280px;
+            box-shadow: 0 1px 4px rgba(9, 30, 66, 0.16);
+          }
+          label { display: block; margin-bottom: 4px; }
+          input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 8px;
+            margin-bottom: 12px;
+          }
+          button {
+            width: 100%;
+            padding: 8px 12px;
+            background: #0052cc;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+          }
+        </style>
       </head>
       <body>
-        <h1>Login</h1>
-
         <form method="POST" action="/api/identity/login">
+          <h1>Login</h1>
           <input
             type="hidden"
             name="return_to"

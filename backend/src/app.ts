@@ -37,6 +37,7 @@ app.use(
 app.use("/api", healthRouter);
 app.use("/api", dbRouter);
 app.use("/api", protectedRouter);
+app.use("/api/workspaces", workspaceRouter);
 app.use("/api/workspace", workspaceRouter);
 app.use("/api", boardRouter);
 app.use("/api", columnRouter);
