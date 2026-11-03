@@ -83,3 +83,18 @@ export const moveTaskSchema = z.object({
   targetColumnId: z.number().int().positive("Invalid target column ID"),
   targetPosition: z.number().int().min(0, "Position cannot be negative"),
 });
+
+export const createCommentSchema = z.object({
+  content: z.string()
+    .min(1, "Comment cannot be empty")
+    .max(2000, "Comment cannot exceed 2000 characters"),
+});
+
+export const addWorkspaceMemberSchema = z.object({
+  email: z.email("Invalid email address"),
+  role: z.enum(["ADMIN", "MEMBER"]).default("MEMBER"),
+});
+
+export const updateWorkspaceMemberSchema = z.object({
+  role: z.enum(["ADMIN", "MEMBER"]),
+});

@@ -8,6 +8,8 @@ import workspaceRouter from "./routes/workspace.routes.js"
 import boardRouter from "./routes/board.routes.js";
 import columnRouter from "./routes/column.routes.js";
 import taskRouter from "./routes/task.routes.js";
+import commentRouter from "./routes/comment.routes.js";
+import workspaceMemberRouter from "./routes/workspace-member.routes.js";
 
 import errorMiddleware from "./middleware/error.middleware.js"
 import { loggerMiddleware } from "./middleware/logger.middleware.js";
@@ -39,6 +41,8 @@ app.use("/api/workspace", workspaceRouter);
 app.use("/api", boardRouter);
 app.use("/api", columnRouter);
 app.use("/api", taskRouter);
+app.use("/api", commentRouter);
+app.use("/api", workspaceMemberRouter);
 
 app.use("/api/identity",identityRouter);
 app.use("/oauth", oauthRouter);

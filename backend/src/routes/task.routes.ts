@@ -7,6 +7,7 @@ import {
   updateTaskController,
   deleteTaskController,
   moveTaskController,
+  getTaskHistoryController,
 } from "../controllers/task.controller.js";
 
 import { authMiddleware } from "../middleware/auth.middleware.js";
@@ -68,6 +69,13 @@ router.delete(
   authMiddleware,
   requireWorkspaceMember,
   deleteTaskController
+);
+
+router.get(
+  "/workspaces/:workspaceId/boards/:boardId/columns/:columnId/tasks/:taskId/history",
+  authMiddleware,
+  requireWorkspaceMember,
+  getTaskHistoryController
 );
 
 export default router;

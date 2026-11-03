@@ -11,6 +11,8 @@ import {
   moveTask,
 } from "../services/task.service.js";
 
+import { getTaskHistory } from "../services/task-history.service.js";
+
 async function validateHierarchy(
   workspaceId: number,
   boardId: number,
@@ -59,11 +61,21 @@ export async function createTaskController(
       });
     }
 
+    if (!req.user) {
+      return res.status(401).json({
+      success: false,
+      message: "Authentication required",
+    });
+
+
+}
+
     const task = await createTask(
       req.body.title,
       req.body.description,
       req.body.priority,
-      columnId
+      columnId,
+      req.user.id
     );
 
     return res.status(201).json({
@@ -207,10 +219,12 @@ export async function updateTaskController(
       req.params.taskId
     );
 
+     
+
     const column = await validateHierarchy(
       workspaceId,
       boardId,
-      columnId
+      columnId,
     );
 
     if (!column) {
@@ -220,16 +234,24 @@ export async function updateTaskController(
       });
     }
 
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
     const result = await updateTask(
       taskId,
       columnId,
-      req.body
+      req.body,
+      req.user.id,
     );
 
-    if (result.count === 0) {
-      return res.status(404).json({
+    if (!result) {
+      return res.status(500).json({
         success: false,
-        message: "Task not found",
+        message: "Failed to update task",
       });
     }
 
@@ -370,11 +392,19 @@ export async function moveTaskController(
       });
     }
 
+     if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
     const movedTask = await moveTask(
       taskId,
       sourceColumnId,
       targetColumnId,
-      targetPosition
+      targetPosition,
+      req.user.id
     );
 
     return res.status(200).json({
@@ -398,6 +428,60 @@ export async function moveTaskController(
     return res.status(500).json({
       success: false,
       message: "Failed to move task",
+    });
+  }
+}
+
+
+export async function getTaskHistoryController(
+  req: Request,
+  res: Response
+) {
+  try {
+    const workspaceId = Number(req.params.workspaceId);
+    const boardId = Number(req.params.boardId);
+    const columnId = Number(req.params.columnId);
+    const taskId = Number(req.params.taskId);
+
+    const column = await validateHierarchy(
+      workspaceId,
+      boardId,
+      columnId
+    );
+
+    if (!column) {
+      return res.status(404).json({
+        success: false,
+        message: "Column not found",
+      });
+    }
+
+    const task = await prisma.task.findFirst({
+      where: {
+        id: taskId,
+        columnId,
+      },
+    });
+
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found",
+      });
+    }
+
+    const history = await getTaskHistory(taskId);
+
+    return res.status(200).json({
+      success: true,
+      data: history,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch task history",
     });
   }
 }

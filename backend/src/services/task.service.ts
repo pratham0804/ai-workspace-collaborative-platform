@@ -5,29 +5,37 @@ export async function createTask(
   title: string,
   description: string | undefined,
   priority: string | undefined,
-  columnId: number
+  columnId: number,
+  userId: number
 ) {
-  const lastTask = await prisma.task.findFirst({
-    where: {
-      columnId,
-    },
-    orderBy: {
-      position: "desc",
-    },
-  });
+  return prisma.$transaction(async (tx) => {
+    const lastTask = await tx.task.findFirst({
+      where: { columnId },
+      orderBy: { position: "desc" },
+    });
 
-  const position = lastTask
-    ? lastTask.position + 1
-    : 0;
+    const position = lastTask ? lastTask.position + 1 : 0;
 
-  return prisma.task.create({
-    data: {
-      title,
-      description : description ?? null,
-      priority: priority ?? "MEDIUM",
-      columnId,
-      position,
-    },
+    const task = await tx.task.create({
+      data: {
+        title,
+        description : description ?? null,
+        priority: priority ?? "MEDIUM",
+        columnId,
+        position,
+      },
+    });
+
+    await tx.taskHistory.create({
+      data: {
+        taskId: task.id,
+        userId,
+        action: "CREATED",
+        toColumnId: columnId,
+      },
+    });
+
+    return task;
   });
 }
 
@@ -63,14 +71,38 @@ export async function updateTask(
     title?: string;
     description?: string;
     priority?: string;
-  }
+  },
+  userId: number
 ) {
-  return prisma.task.updateMany({
-    where: {
-      id: taskId,
-      columnId,
-    },
-    data,
+  return prisma.$transaction(async (tx) => {
+    const task = await tx.task.findFirst({
+      where: {
+        id: taskId,
+        columnId,
+      },
+    });
+
+    if (!task) {
+      return null;
+    }
+
+    const updatedTask = await tx.task.update({
+      where: {
+        id: taskId,
+      },
+      data,
+    });
+
+    await tx.taskHistory.create({
+      data: {
+        taskId,
+        userId,
+        action: "UPDATED",
+        details: JSON.stringify(data),
+      },
+    });
+
+    return updatedTask;
   });
 }
 
@@ -91,7 +123,8 @@ export async function moveTask(
   taskId: number,
   sourceColumnId: number,
   targetColumnId: number,
-  targetPosition: number
+  targetPosition: number,
+  userId: number
 ) {
   return prisma.$transaction(async (tx) => {
     // Get the task being moved
@@ -156,6 +189,19 @@ export async function moveTask(
           },
         });
       }
+
+      await tx.taskHistory.create({
+        data: {
+          taskId,
+          userId,
+          action:
+            sourceColumnId === targetColumnId
+              ? "REORDERED"
+              : "MOVED",
+          fromColumnId: sourceColumnId,
+          toColumnId: targetColumnId,
+        },
+      });
 
       return tx.task.findUnique({
         where: {
@@ -250,10 +296,26 @@ export async function moveTask(
       });
     }
 
+    await tx.taskHistory.create({
+      data: {
+        taskId,
+        userId,
+        action:
+          sourceColumnId === targetColumnId
+            ? "REORDERED"
+            : "MOVED",
+        fromColumnId: sourceColumnId,
+        toColumnId: targetColumnId,
+      },
+    });
+
     return tx.task.findUnique({
       where: {
         id: taskId,
       },
     });
+  }, {
+    maxWait: 10000,
+    timeout: 20000,
   });
 }
