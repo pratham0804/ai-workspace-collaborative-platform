@@ -12,6 +12,7 @@ import {
 } from "../services/task.service.js";
 
 import { getTaskHistory } from "../services/task-history.service.js";
+import { broadcastBoardEvent } from "../services/realtime.service.js";
 
 async function validateHierarchy(
   workspaceId: number,
@@ -76,6 +77,14 @@ export async function createTaskController(
       req.body.priority,
       columnId,
       req.user.id
+    );
+
+    broadcastBoardEvent(
+      "task:created",
+      workspaceId,
+      column.boardId,
+      req.user.id,
+      task
     );
 
     return res.status(201).json({
@@ -260,6 +269,14 @@ export async function updateTaskController(
       columnId
     );
 
+    broadcastBoardEvent(
+      "task:updated",
+      workspaceId,
+      column.boardId,
+      req.user.id,
+      updatedTask
+    );
+
     return res.status(200).json({
       success: true,
       data: updatedTask,
@@ -318,6 +335,19 @@ export async function deleteTaskController(
         success: false,
         message: "Task not found",
       });
+    }
+
+    if (req.user) {
+      broadcastBoardEvent(
+        "task:deleted",
+        workspaceId,
+        column.boardId,
+        req.user.id,
+        {
+          id: taskId,
+          columnId,
+        }
+      );
     }
 
     return res.status(200).json({
@@ -405,6 +435,19 @@ export async function moveTaskController(
       targetColumnId,
       targetPosition,
       req.user.id
+    );
+
+    broadcastBoardEvent(
+      "task:moved",
+      workspaceId,
+      sourceColumn.boardId,
+      req.user.id,
+      {
+        task: movedTask,
+        sourceColumnId,
+        targetColumnId,
+        targetPosition,
+      }
     );
 
     return res.status(200).json({

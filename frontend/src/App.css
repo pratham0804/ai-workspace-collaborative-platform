@@ -304,3 +304,17 @@
   overflow-x: auto;
   font-size: 12px;
 }
+
+.live-status {
+  font-size: 12px;
+  color: #5e6c84;
+  white-space: nowrap;
+}
+
+.live-status.ok {
+  color: #006644;
+}
+
+.live-status.err {
+  color: #de350b;
+}

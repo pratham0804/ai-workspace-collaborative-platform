@@ -5,6 +5,7 @@ import {
   getTaskComments,
   deleteComment,
 } from "../services/comment.service.js";
+import { broadcastBoardEvent } from "../services/realtime.service.js";
 
 async function validateTaskHierarchy(
   workspaceId: number,
@@ -20,6 +21,13 @@ async function validateTaskHierarchy(
         boardId,
         board: {
           workspaceId,
+        },
+      },
+    },
+    include: {
+      column: {
+        select: {
+          boardId: true,
         },
       },
     },
@@ -56,6 +64,14 @@ export async function createCommentController(
       task.id,
       req.user.id,
       req.body.content
+    );
+
+    broadcastBoardEvent(
+      "comment:created",
+      Number(req.params.workspaceId),
+      task.column.boardId,
+      req.user.id,
+      comment
     );
 
     return res.status(201).json({
@@ -133,8 +149,10 @@ export async function deleteCommentController(
       });
     }
 
+    const commentId = Number(req.params.commentId);
+
     const result = await deleteComment(
-      Number(req.params.commentId),
+      commentId,
       task.id,
       req.user.id
     );
@@ -145,6 +163,18 @@ export async function deleteCommentController(
         message: "Comment not found or you are not the owner",
       });
     }
+
+    broadcastBoardEvent(
+      "comment:deleted",
+      Number(req.params.workspaceId),
+      task.column.boardId,
+      req.user.id,
+      {
+        id: commentId,
+        taskId: task.id,
+        columnId: task.columnId,
+      }
+    );
 
     return res.status(200).json({
       success: true,

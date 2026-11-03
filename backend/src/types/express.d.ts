@@ -1,6 +1,5 @@
-import type { User, WorkspaceMember } from "@prisma/client";
-
-export type AuthUser = Omit<User, "passwordHash">;
+import type { WorkspaceMember } from "@prisma/client";
+import type { AuthUser } from "./auth-user.js";
 
 declare global {
   namespace Express {

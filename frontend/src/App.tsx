@@ -10,6 +10,14 @@ import {
   taskApi,
   workspaceApi,
 } from "./services/kanbanApi";
+import { SocketProvider, useSocket } from "./socket/SocketProvider";
+import { useBoardRealtime } from "./socket/useBoardRealtime";
+import type {
+  BoardRealtimeEvent,
+  ColumnDeletedData,
+  TaskDeletedData,
+  TaskMovedData,
+} from "./socket/types";
 import type { Board, Column, Task, Workspace } from "./types/kanban";
 import "./App.css";
 
@@ -40,6 +48,8 @@ function BoardApp() {
     columnId: number;
     task?: Task | null;
   } | null>(null);
+
+  const { connected, connectionError } = useSocket();
 
   const loadBoardData = useCallback(
     async (activeWorkspaceId: number, activeBoardId: number) => {
@@ -124,6 +134,145 @@ function BoardApp() {
     if (!workspaceId || !boardId) return;
     await loadBoardData(workspaceId, boardId);
   }
+
+  function applyRealtimeEvent(event: BoardRealtimeEvent) {
+    switch (event.type) {
+      case "column:created": {
+        const column = event.data as Column;
+        setColumns((prev) =>
+          prev.some((item) => item.id === column.id)
+            ? prev
+            : [...prev, column].sort((a, b) => a.position - b.position)
+        );
+        setTasksByColumn((prev) => ({
+          ...prev,
+          [column.id]: prev[column.id] ?? [],
+        }));
+        break;
+      }
+      case "column:updated": {
+        const column = event.data as Column;
+        setColumns((prev) =>
+          prev.map((item) => (item.id === column.id ? column : item))
+        );
+        break;
+      }
+      case "column:deleted": {
+        const data = event.data as ColumnDeletedData;
+        setColumns((prev) => prev.filter((item) => item.id !== data.id));
+        setTasksByColumn((prev) => {
+          const next = { ...prev };
+          delete next[data.id];
+          return next;
+        });
+        setSelectedTask((current) =>
+          current?.columnId === data.id ? null : current
+        );
+        break;
+      }
+      case "task:created": {
+        const task = event.data as Task;
+        setTasksByColumn((prev) => {
+          const current = prev[task.columnId] ?? [];
+          if (current.some((item) => item.id === task.id)) {
+            return prev;
+          }
+          return {
+            ...prev,
+            [task.columnId]: [...current, task].sort(
+              (a, b) => a.position - b.position
+            ),
+          };
+        });
+        break;
+      }
+      case "task:updated": {
+        const task = event.data as Task;
+        setTasksByColumn((prev) => ({
+          ...prev,
+          [task.columnId]: (prev[task.columnId] ?? []).map((item) =>
+            item.id === task.id ? task : item
+          ),
+        }));
+        setSelectedTask((current) =>
+          current?.id === task.id ? task : current
+        );
+        break;
+      }
+      case "task:deleted": {
+        const data = event.data as TaskDeletedData;
+        setTasksByColumn((prev) => ({
+          ...prev,
+          [data.columnId]: (prev[data.columnId] ?? []).filter(
+            (item) => item.id !== data.id
+          ),
+        }));
+        setSelectedTask((current) =>
+          current?.id === data.id ? null : current
+        );
+        break;
+      }
+      case "task:moved": {
+        const data = event.data as TaskMovedData;
+        const moved = {
+          ...data.task,
+          columnId: data.targetColumnId,
+          position: data.targetPosition,
+        };
+
+        setTasksByColumn((prev) => {
+          if (data.sourceColumnId === data.targetColumnId) {
+            const list = (prev[data.sourceColumnId] ?? []).filter(
+              (item) => item.id !== moved.id
+            );
+            list.splice(data.targetPosition, 0, moved);
+            return {
+              ...prev,
+              [data.sourceColumnId]: list.map((item, index) => ({
+                ...item,
+                position: index,
+              })),
+            };
+          }
+
+          const source = (prev[data.sourceColumnId] ?? []).filter(
+            (item) => item.id !== moved.id
+          );
+          const target = (prev[data.targetColumnId] ?? []).filter(
+            (item) => item.id !== moved.id
+          );
+          target.splice(data.targetPosition, 0, moved);
+
+          return {
+            ...prev,
+            [data.sourceColumnId]: source.map((item, index) => ({
+              ...item,
+              position: index,
+            })),
+            [data.targetColumnId]: target.map((item, index) => ({
+              ...item,
+              columnId: data.targetColumnId,
+              position: index,
+            })),
+          };
+        });
+
+        setSelectedTask((current) =>
+          current?.id === moved.id ? moved : current
+        );
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  useBoardRealtime({
+    workspaceId,
+    boardId,
+    onEvent: applyRealtimeEvent,
+    onReconnect: refreshBoard,
+  });
 
   async function handleCreateWorkspace() {
     const name = window.prompt("Workspace name");
@@ -310,6 +459,12 @@ function BoardApp() {
             New board
           </button>
 
+          <span className={`live-status ${connected ? "ok" : "err"}`}>
+            {connected
+              ? "Live"
+              : connectionError || "Connecting..."}
+          </span>
+
           <button type="button" onClick={logout}>
             Log out
           </button>
@@ -403,5 +558,9 @@ export default function App() {
     return <Home />;
   }
 
-  return <BoardApp />;
+  return (
+    <SocketProvider>
+      <BoardApp />
+    </SocketProvider>
+  );
 }

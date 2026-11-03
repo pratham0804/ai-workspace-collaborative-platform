@@ -8,6 +8,12 @@ import {
   commentApi,
   taskApi,
 } from "../services/kanbanApi";
+import { getCurrentUserId } from "../socket/currentUser";
+import { useSocket } from "../socket/SocketProvider";
+import type {
+  BoardRealtimeEvent,
+  CommentDeletedData,
+} from "../socket/types";
 
 interface Props {
   workspaceId: number;
@@ -30,6 +36,7 @@ export default function TaskDetails({
   const [history, setHistory] = useState<TaskHistory[]>([]);
   const [comment, setComment] = useState("");
   const [loading, setLoading] = useState(true);
+  const { socket } = useSocket();
 
   async function loadDetails() {
     setLoading(true);
@@ -60,6 +67,46 @@ export default function TaskDetails({
   useEffect(() => {
     loadDetails();
   }, [task.id]);
+
+  useEffect(() => {
+    if (!socket) {
+      return;
+    }
+
+    const onCreated = (event: BoardRealtimeEvent<Comment>) => {
+      if (event.actorId === getCurrentUserId()) return;
+      if (event.data.taskId !== task.id) return;
+
+      setComments((prev) =>
+        prev.some((item) => item.id === event.data.id)
+          ? prev
+          : [...prev, event.data]
+      );
+    };
+
+    const onDeleted = (event: BoardRealtimeEvent<CommentDeletedData>) => {
+      if (event.actorId === getCurrentUserId()) return;
+      if (event.data.taskId !== task.id) return;
+
+      setComments((prev) =>
+        prev.filter((item) => item.id !== event.data.id)
+      );
+    };
+
+    const onReconnect = () => {
+      void loadDetails();
+    };
+
+    socket.on("comment:created", onCreated);
+    socket.on("comment:deleted", onDeleted);
+    socket.io.on("reconnect", onReconnect);
+
+    return () => {
+      socket.off("comment:created", onCreated);
+      socket.off("comment:deleted", onDeleted);
+      socket.io.off("reconnect", onReconnect);
+    };
+  }, [socket, task.id]);
 
   async function addComment() {
     if (!comment.trim()) return;

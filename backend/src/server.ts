@@ -1,11 +1,12 @@
-import  app  from "./app.js";
+import { createServer } from "node:http";
+import app from "./app.js";
 import { env } from "./config/env.js";
+import { initSocket } from "./socket/index.js";
 
-// const PORT = 5000;
-// const PORT = process.env.PORT;  we cannot do this everywhere
+const httpServer = createServer(app);
 
-const PORT = env.port;
+initSocket(httpServer);
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+httpServer.listen(env.port, () => {
+  console.log(`Server running on http://localhost:${env.port}`);
 });

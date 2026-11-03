@@ -7,13 +7,15 @@ import type {
 import { prisma } from "../config/prisma.js";
 
 export function parsePositiveIntParam(
-  value: string | undefined
+  value: string | string[] | undefined
 ): number | null {
-  if (value === undefined) {
+  const raw = Array.isArray(value) ? value[0] : value;
+
+  if (raw === undefined) {
     return null;
   }
 
-  const id = Number(value);
+  const id = Number(raw);
 
   if (!Number.isInteger(id) || id <= 0) {
     return null;

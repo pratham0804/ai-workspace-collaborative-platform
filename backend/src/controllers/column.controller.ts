@@ -9,6 +9,7 @@ import {
 } from "../services/column.service.js";
 
 import { prisma } from "../config/prisma.js";
+import { broadcastBoardEvent } from "../services/realtime.service.js";
 
 export async function createColumnController(
   req: Request,
@@ -40,8 +41,18 @@ export async function createColumnController(
 
     const column = await createColumn(
       req.body.name,
-      boardId
+      board.id
     );
+
+    if (req.user) {
+      broadcastBoardEvent(
+        "column:created",
+        workspaceId,
+        board.id,
+        req.user.id,
+        column
+      );
+    }
 
     return res.status(201).json({
       success: true,
@@ -203,8 +214,18 @@ export async function updateColumnController(
 
     const updatedColumn = await getColumnById(
       columnId,
-      boardId
+      board.id
     );
+
+    if (req.user) {
+      broadcastBoardEvent(
+        "column:updated",
+        workspaceId,
+        board.id,
+        req.user.id,
+        updatedColumn
+      );
+    }
 
     return res.status(200).json({
       success: true,
@@ -253,7 +274,7 @@ export async function deleteColumnController(
 
     const result = await deleteColumn(
       columnId,
-      boardId
+      board.id
     );
 
     if (result.count === 0) {
@@ -261,6 +282,19 @@ export async function deleteColumnController(
         success: false,
         message: "Column not found",
       });
+    }
+
+    if (req.user) {
+      broadcastBoardEvent(
+        "column:deleted",
+        workspaceId,
+        board.id,
+        req.user.id,
+        {
+          id: columnId,
+          boardId: board.id,
+        }
+      );
     }
 
     return res.status(200).json({
