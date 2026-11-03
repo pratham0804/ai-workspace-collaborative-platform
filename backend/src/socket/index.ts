@@ -27,7 +27,7 @@ export function initSocket(httpServer: HttpServer) {
     SocketData
   >(httpServer, {
     cors: {
-      origin: env.frontendOrigin,
+      origin: env.frontendOrigins,
       methods: ["GET", "POST"],
     },
   });

@@ -10,17 +10,19 @@ import columnRouter from "./routes/column.routes.js";
 import taskRouter from "./routes/task.routes.js";
 import commentRouter from "./routes/comment.routes.js";
 import workspaceMemberRouter from "./routes/workspace-member.routes.js";
+import documentRouter from "./routes/document.routes.js";
 
 import errorMiddleware from "./middleware/error.middleware.js"
 import { loggerMiddleware } from "./middleware/logger.middleware.js";
 import { sessionMiddleware } from "./middleware/session.middleware.js";
+import { env } from "./config/env.js";
 
 import cors from "cors";
 import cookieParser from "cookie-parser";
 
 
 const app = express();
-app.use(express.json());  
+app.use(express.json({ limit: "2mb" }));  
 app.use(express.urlencoded({ extended: true }));
 
 app.use(cookieParser());
@@ -30,7 +32,7 @@ app.use(sessionMiddleware);
 
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: env.frontendOrigins,
   })
 );
 
@@ -44,6 +46,7 @@ app.use("/api", columnRouter);
 app.use("/api", taskRouter);
 app.use("/api", commentRouter);
 app.use("/api", workspaceMemberRouter);
+app.use("/api", documentRouter);
 
 app.use("/api/identity",identityRouter);
 app.use("/oauth", oauthRouter);

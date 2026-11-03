@@ -16,6 +16,7 @@ router.get("/authorize", async (req, res) => {
       response_type,
       code_challenge,
       code_challenge_method,
+      state,
     } = req.query;
 
     if (
@@ -111,6 +112,10 @@ router.get("/authorize", async (req, res) => {
       "code",
       rawCode
     );
+
+    if (typeof state === "string" && state.length > 0) {
+      redirectUrl.searchParams.set("state", state);
+    }
 
     return res.redirect(
       redirectUrl.toString()

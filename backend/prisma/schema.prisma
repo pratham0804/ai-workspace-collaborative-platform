@@ -30,6 +30,10 @@ model User {
 
   taskHistories TaskHistory[]
   comments      Comment[]
+
+  createdDocuments Document[]        @relation("DocumentCreatedBy")
+  updatedDocuments Document[]        @relation("DocumentUpdatedBy")
+  documentVersions DocumentVersion[]
 }
 
 model Session {
@@ -82,9 +86,10 @@ model Workspace {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  owner   User              @relation(fields: [ownerId], references: [id])
-  members WorkspaceMember[]
-  boards  Board[]
+  owner     User              @relation(fields: [ownerId], references: [id])
+  members   WorkspaceMember[]
+  boards    Board[]
+  documents Document[]
 
   @@index([ownerId])
 }
@@ -195,4 +200,54 @@ model Comment {
 
   @@index([taskId])
   @@index([userId])
+}
+
+model Document {
+  id          Int     @id @default(autoincrement())
+  title       String
+  content     Json
+  contentText String  @default("")
+  workspaceId Int
+  parentId    Int?
+  createdById Int
+  updatedById Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  parent    Document? @relation("DocumentTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children  Document[] @relation("DocumentTree")
+
+  createdBy User @relation("DocumentCreatedBy", fields: [createdById], references: [id])
+  updatedBy User @relation("DocumentUpdatedBy", fields: [updatedById], references: [id])
+
+  versions DocumentVersion[]
+
+  @@index([workspaceId])
+  @@index([parentId])
+  @@index([workspaceId, parentId])
+  @@index([createdById])
+  @@index([updatedById])
+}
+
+model DocumentVersion {
+  id            Int     @id @default(autoincrement())
+  documentId    Int
+  versionNumber Int
+  title         String
+  content       Json
+  contentText   String
+  authorId      Int
+  changeSummary String?
+
+  createdAt DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  author   User     @relation(fields: [authorId], references: [id])
+
+  @@unique([documentId, versionNumber])
+  @@index([documentId])
+  @@index([authorId])
+  @@index([createdAt])
 }
