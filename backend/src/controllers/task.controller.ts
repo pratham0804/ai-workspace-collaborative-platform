@@ -13,6 +13,33 @@ import {
 
 import { getTaskHistory } from "../services/task-history.service.js";
 import { broadcastBoardEvent } from "../services/realtime.service.js";
+import { HttpError } from "../utils/http-error.js";
+
+function handleTaskError(error: unknown, res: Response, fallback: string) {
+  if (error instanceof HttpError) {
+    return res.status(error.statusCode).json({
+      success: false,
+      message: error.message,
+    });
+  }
+
+  console.error(error);
+
+  if (
+    error instanceof Error &&
+    error.message === "Invalid target position"
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+
+  return res.status(500).json({
+    success: false,
+    message: fallback,
+  });
+}
 
 async function validateHierarchy(
   workspaceId: number,
@@ -84,7 +111,8 @@ export async function createTaskController(
       workspaceId,
       column.boardId,
       req.user.id,
-      task
+      task,
+      task.revision
     );
 
     return res.status(201).json({
@@ -253,8 +281,13 @@ export async function updateTaskController(
     const result = await updateTask(
       taskId,
       columnId,
-      req.body,
+      {
+        title: req.body.title,
+        description: req.body.description,
+        priority: req.body.priority,
+      },
       req.user.id,
+      req.body.expectedRevision
     );
 
     if (!result) {
@@ -264,30 +297,21 @@ export async function updateTaskController(
       });
     }
 
-    const updatedTask = await getTaskById(
-      taskId,
-      columnId
-    );
-
     broadcastBoardEvent(
       "task:updated",
       workspaceId,
       column.boardId,
       req.user.id,
-      updatedTask
+      result,
+      result.revision
     );
 
     return res.status(200).json({
       success: true,
-      data: updatedTask,
+      data: result,
     });
   } catch (error) {
-    console.error(error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to update task",
-    });
+    return handleTaskError(error, res, "Failed to update task");
   }
 }
 
@@ -434,8 +458,16 @@ export async function moveTaskController(
       sourceColumnId,
       targetColumnId,
       targetPosition,
-      req.user.id
+      req.user.id,
+      req.body.expectedRevision
     );
+
+    if (!movedTask) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found",
+      });
+    }
 
     broadcastBoardEvent(
       "task:moved",
@@ -447,7 +479,8 @@ export async function moveTaskController(
         sourceColumnId,
         targetColumnId,
         targetPosition,
-      }
+      },
+      movedTask.revision
     );
 
     return res.status(200).json({
@@ -456,22 +489,7 @@ export async function moveTaskController(
       data: movedTask,
     });
   } catch (error) {
-    console.error(error);
-
-    if (
-      error instanceof Error &&
-      error.message === "Invalid target position"
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: error.message,
-      });
-    }
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to move task",
-    });
+    return handleTaskError(error, res, "Failed to move task");
   }
 }
 

@@ -18,6 +18,7 @@ export interface BoardRealtimeEvent<T = unknown> {
   boardId: number;
   actorId: number;
   timestamp: string;
+  revision?: number;
   data: T;
 }
 

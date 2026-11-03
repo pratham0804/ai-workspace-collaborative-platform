@@ -4,6 +4,7 @@ import { loginWithSSO } from "./auth/login";
 import KanbanColumn from "./components/KanbanColumn";
 import TaskDetails from "./components/TaskDetails";
 import TaskModal from "./components/TaskModal";
+import { isConflictError } from "./services/api";
 import {
   boardApi,
   columnApi,
@@ -40,6 +41,7 @@ function BoardApp() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [conflict, setConflict] = useState("");
 
   const [draggedTask, setDraggedTask] = useState<Task | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -188,12 +190,40 @@ function BoardApp() {
       }
       case "task:updated": {
         const task = event.data as Task;
-        setTasksByColumn((prev) => ({
-          ...prev,
-          [task.columnId]: (prev[task.columnId] ?? []).map((item) =>
-            item.id === task.id ? task : item
-          ),
-        }));
+        setTasksByColumn((prev) => {
+          let local: Task | undefined;
+          for (const list of Object.values(prev)) {
+            local = list.find((item) => item.id === task.id);
+            if (local) break;
+          }
+
+          if (
+            local &&
+            typeof local.revision === "number" &&
+            typeof task.revision === "number"
+          ) {
+            if (task.revision < local.revision) {
+              if (local.columnId !== task.columnId) {
+                void refreshBoard();
+              }
+              return prev;
+            }
+          }
+
+          const next = { ...prev };
+          if (local && local.columnId !== task.columnId) {
+            next[local.columnId] = (next[local.columnId] ?? []).filter(
+              (item) => item.id !== task.id
+            );
+          }
+
+          next[task.columnId] = (next[task.columnId] ?? [])
+            .filter((item) => item.id !== task.id)
+            .concat(task)
+            .sort((a, b) => a.position - b.position);
+
+          return next;
+        });
         setSelectedTask((current) =>
           current?.id === task.id ? task : current
         );
@@ -221,6 +251,21 @@ function BoardApp() {
         };
 
         setTasksByColumn((prev) => {
+          let local: Task | undefined;
+          for (const list of Object.values(prev)) {
+            local = list.find((item) => item.id === moved.id);
+            if (local) break;
+          }
+
+          if (
+            local &&
+            typeof local.revision === "number" &&
+            typeof moved.revision === "number" &&
+            moved.revision < local.revision
+          ) {
+            void refreshBoard();
+            return prev;
+          }
           if (data.sourceColumnId === data.targetColumnId) {
             const list = (prev[data.sourceColumnId] ?? []).filter(
               (item) => item.id !== moved.id
@@ -341,11 +386,18 @@ function BoardApp() {
         draggedTask.columnId,
         draggedTask.id,
         targetColumnId,
-        targetPosition
+        targetPosition,
+        draggedTask.revision
       );
+      setConflict("");
       await refreshBoard();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to move task");
+      if (isConflictError(err)) {
+        setConflict(err.message);
+        await refreshBoard();
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to move task");
+      }
     } finally {
       setDraggedTask(null);
     }
@@ -364,24 +416,36 @@ function BoardApp() {
       priority: data.priority,
     };
 
-    if (taskModal.mode === "create") {
-      await taskApi.create(
-        workspaceId,
-        boardId,
-        taskModal.columnId,
-        payload
-      );
-    } else if (taskModal.task) {
-      await taskApi.update(
-        workspaceId,
-        boardId,
-        taskModal.task.columnId,
-        taskModal.task.id,
-        payload
-      );
-    }
+    try {
+      if (taskModal.mode === "create") {
+        await taskApi.create(
+          workspaceId,
+          boardId,
+          taskModal.columnId,
+          payload
+        );
+      } else if (taskModal.task) {
+        await taskApi.update(
+          workspaceId,
+          boardId,
+          taskModal.task.columnId,
+          taskModal.task.id,
+          {
+            ...payload,
+            expectedRevision: taskModal.task.revision,
+          }
+        );
+      }
 
-    await refreshBoard();
+      setConflict("");
+      await refreshBoard();
+    } catch (err) {
+      if (isConflictError(err)) {
+        setConflict(err.message);
+        await refreshBoard();
+      }
+      throw err;
+    }
   }
 
   async function handleDeleteTask() {
@@ -472,6 +536,20 @@ function BoardApp() {
       </header>
 
       {error && <div className="banner error">{error}</div>}
+      {conflict && (
+        <div className="banner error">
+          <span>{conflict}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setConflict("");
+              void refreshBoard();
+            }}
+          >
+            Refresh board
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <p className="muted padded">Loading board...</p>
@@ -528,6 +606,13 @@ function BoardApp() {
         <TaskModal
           mode={taskModal.mode}
           task={taskModal.task}
+          liveRevision={
+            taskModal.task
+              ? Object.values(tasksByColumn)
+                  .flat()
+                  .find((item) => item.id === taskModal.task?.id)?.revision
+              : undefined
+          }
           onClose={() => setTaskModal(null)}
           onSubmit={handleTaskSubmit}
         />

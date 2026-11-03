@@ -1,5 +1,18 @@
 const API_URL = "http://localhost:5000/api";
 
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+export function isConflictError(error: unknown): error is ApiError {
+  return error instanceof ApiError && error.status === 409;
+}
+
 function getToken() {
   return sessionStorage.getItem("docs_access_token");
 }
@@ -33,12 +46,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     sessionStorage.removeItem("docs_access_token");
     sessionStorage.removeItem("docs_id_token");
     window.location.href = "/";
-    throw new Error("Session expired");
+    throw new ApiError("Session expired", 401);
   }
 
   if (!response.ok) {
-    throw new Error(
-      body?.message || body?.error || `Request failed with status ${response.status}`
+    throw new ApiError(
+      body?.message || body?.error || `Request failed with status ${response.status}`,
+      response.status
     );
   }
 

@@ -1,5 +1,13 @@
-import { string, ZodCompileUnsupportedError } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../config/prisma.js";
+import { HttpError } from "../utils/http-error.js";
+
+function staleTaskError() {
+  return new HttpError(
+    "This task was updated by someone else. Refresh and try again.",
+    409
+  );
+}
 
 export async function createTask(
   title: string,
@@ -72,7 +80,8 @@ export async function updateTask(
     description?: string;
     priority?: string;
   },
-  userId: number
+  userId: number,
+  expectedRevision: number
 ) {
   return prisma.$transaction(async (tx) => {
     const task = await tx.task.findFirst({
@@ -86,11 +95,39 @@ export async function updateTask(
       return null;
     }
 
-    const updatedTask = await tx.task.update({
+    const nextTitle = data.title ?? task.title;
+    const nextDescription =
+      data.description === undefined ? task.description : data.description;
+    const nextPriority = data.priority ?? task.priority;
+
+    if (
+      nextTitle === task.title &&
+      nextDescription === task.description &&
+      nextPriority === task.priority
+    ) {
+      return task;
+    }
+
+    const updated = await tx.task.updateMany({
       where: {
         id: taskId,
+        columnId,
+        revision: expectedRevision,
       },
-      data,
+      data: {
+        title: nextTitle,
+        description: nextDescription,
+        priority: nextPriority,
+        revision: { increment: 1 },
+      },
+    });
+
+    if (updated.count === 0) {
+      throw staleTaskError();
+    }
+
+    const updatedTask = await tx.task.findUniqueOrThrow({
+      where: { id: taskId },
     });
 
     await tx.taskHistory.create({
@@ -98,7 +135,12 @@ export async function updateTask(
         taskId,
         userId,
         action: "UPDATED",
-        details: JSON.stringify(data),
+        details: JSON.stringify({
+          title: data.title,
+          description: data.description,
+          priority: data.priority,
+          revision: updatedTask.revision,
+        }),
       },
     });
 
@@ -124,9 +166,11 @@ export async function moveTask(
   sourceColumnId: number,
   targetColumnId: number,
   targetPosition: number,
-  userId: number
+  userId: number,
+  expectedRevision: number
 ) {
-  return prisma.$transaction(async (tx) => {
+  try {
+  return await prisma.$transaction(async (tx) => {
     // Get the task being moved
     const task = await tx.task.findFirst({
       where: {
@@ -137,6 +181,10 @@ export async function moveTask(
 
     if (!task) {
       throw new Error("Task not found");
+    }
+
+    if (task.revision !== expectedRevision) {
+      throw staleTaskError();
     }
 
     // Get all tasks from the source column
@@ -190,6 +238,15 @@ export async function moveTask(
         });
       }
 
+      await tx.task.update({
+        where: { id: taskId },
+        data: { revision: { increment: 1 } },
+      });
+
+      const moved = await tx.task.findUniqueOrThrow({
+        where: { id: taskId },
+      });
+
       await tx.taskHistory.create({
         data: {
           taskId,
@@ -200,14 +257,11 @@ export async function moveTask(
               : "MOVED",
           fromColumnId: sourceColumnId,
           toColumnId: targetColumnId,
+          details: JSON.stringify({ revision: moved.revision }),
         },
       });
 
-      return tx.task.findUnique({
-        where: {
-          id: taskId,
-        },
-      });
+      return moved;
     }
 
     // Verify target column exists
@@ -296,6 +350,15 @@ export async function moveTask(
       });
     }
 
+    await tx.task.update({
+      where: { id: taskId },
+      data: { revision: { increment: 1 } },
+    });
+
+    const moved = await tx.task.findUniqueOrThrow({
+      where: { id: taskId },
+    });
+
     await tx.taskHistory.create({
       data: {
         taskId,
@@ -306,16 +369,30 @@ export async function moveTask(
             : "MOVED",
         fromColumnId: sourceColumnId,
         toColumnId: targetColumnId,
+        details: JSON.stringify({ revision: moved.revision }),
       },
     });
 
-    return tx.task.findUnique({
-      where: {
-        id: taskId,
-      },
-    });
+    return moved;
   }, {
     maxWait: 10000,
     timeout: 20000,
   });
+  } catch (error) {
+    if (error instanceof HttpError) {
+      throw error;
+    }
+
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      throw new HttpError(
+        "The board changed while moving this task. Refresh and try again.",
+        409
+      );
+    }
+
+    throw error;
+  }
 }

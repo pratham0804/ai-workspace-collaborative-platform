@@ -3,6 +3,7 @@ import type { Task } from "../types/kanban";
 
 interface Props {
   task?: Task | null;
+  liveRevision?: number;
   mode: "create" | "edit";
   onClose: () => void;
   onSubmit: (data: {
@@ -14,6 +15,7 @@ interface Props {
 
 export default function TaskModal({
   task,
+  liveRevision,
   mode,
   onClose,
   onSubmit,
@@ -27,12 +29,28 @@ export default function TaskModal({
   >(task?.priority ?? "MEDIUM");
 
   const [loading, setLoading] = useState(false);
+  const [conflict, setConflict] = useState("");
+  const [loadedRevision, setLoadedRevision] = useState(task?.revision ?? 1);
 
   useEffect(() => {
     setTitle(task?.title ?? "");
     setDescription(task?.description ?? "");
     setPriority(task?.priority ?? "MEDIUM");
-  }, [task]);
+    setLoadedRevision(task?.revision ?? 1);
+    setConflict("");
+  }, [task?.id]);
+
+  useEffect(() => {
+    if (
+      mode === "edit" &&
+      typeof liveRevision === "number" &&
+      liveRevision !== loadedRevision
+    ) {
+      setConflict(
+        "This task changed while you were editing. Refresh the board before saving, or save to see a conflict error."
+      );
+    }
+  }, [liveRevision, loadedRevision, mode]);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -49,6 +67,12 @@ export default function TaskModal({
       });
 
       onClose();
+    } catch (error) {
+      setConflict(
+        error instanceof Error
+          ? error.message
+          : "Failed to save task"
+      );
     } finally {
       setLoading(false);
     }
@@ -66,6 +90,7 @@ export default function TaskModal({
         </div>
 
         <form onSubmit={handleSubmit}>
+          {conflict && <p className="banner error">{conflict}</p>}
           <label>Title</label>
 
           <input

@@ -1,10 +1,18 @@
 import { Prisma } from "@prisma/client";
+import {
+  closeCollaborationDocument,
+  getLoadedCollaborationDoc,
+  notifyCollaborationDocument,
+} from "../collab/server.js";
+import {
+  replaceYjsState,
+  ydocToTiptapJson,
+  yjsStateToTiptapJson,
+} from "../collab/persistence.js";
+import { EMPTY_DOC_CONTENT } from "../collab/tiptap.js";
 import { prisma } from "../config/prisma.js";
 
-export const EMPTY_DOC_CONTENT = {
-  type: "doc",
-  content: [{ type: "paragraph" }],
-};
+export { EMPTY_DOC_CONTENT };
 
 export class DocumentServiceError extends Error {
   statusCode: number;
@@ -88,9 +96,7 @@ async function createVersion(
   });
 }
 
-async function runVersionedTransaction<T>(
-  work: () => Promise<T>
-) {
+async function runVersionedTransaction<T>(work: () => Promise<T>) {
   const maxAttempts = 3;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -180,6 +186,13 @@ const documentInclude = {
   },
 };
 
+function staleWriteError() {
+  return new DocumentServiceError(
+    "This document was updated by someone else. Refresh and try again.",
+    409
+  );
+}
+
 export async function createDocument(
   workspaceId: number,
   userId: number,
@@ -193,30 +206,30 @@ export async function createDocument(
 
   return runVersionedTransaction(() =>
     prisma.$transaction(async (tx) => {
-    const document = await tx.document.create({
-      data: {
-        title,
+      const document = await tx.document.create({
+        data: {
+          title,
+          content,
+          contentText,
+          workspaceId,
+          parentId,
+          createdById: userId,
+          updatedById: userId,
+        },
+        include: documentInclude,
+      });
+
+      await createVersion(tx, {
+        documentId: document.id,
+        title: document.title,
         content,
         contentText,
-        workspaceId,
-        parentId,
-        createdById: userId,
-        updatedById: userId,
-      },
-      include: documentInclude,
-    });
+        authorId: userId,
+        changeSummary: "Created document",
+      });
 
-    await createVersion(tx, {
-      documentId: document.id,
-      title: document.title,
-      content,
-      contentText,
-      authorId: userId,
-      changeSummary: "Created document",
-    });
-
-    return document;
-  })
+      return document;
+    })
   );
 }
 
@@ -229,6 +242,8 @@ export async function listDocuments(workspaceId: number) {
       title: true,
       parentId: true,
       workspaceId: true,
+      revision: true,
+      collaborationGeneration: true,
       updatedAt: true,
       createdAt: true,
       updatedBy: {
@@ -253,6 +268,8 @@ export async function searchDocuments(workspaceId: number, query: string) {
       title: true,
       parentId: true,
       workspaceId: true,
+      revision: true,
+      collaborationGeneration: true,
       contentText: true,
       updatedAt: true,
     },
@@ -277,8 +294,7 @@ export async function updateDocument(
   data: {
     title?: string;
     parentId?: number | null;
-    content?: unknown;
-    changeSummary?: string;
+    expectedRevision: number;
   }
 ) {
   const existing = await getDocument(workspaceId, documentId);
@@ -290,60 +306,134 @@ export async function updateDocument(
   const nextTitle = data.title ?? existing.title;
   const nextParentId =
     data.parentId === undefined ? existing.parentId : data.parentId;
-  const nextContent =
-    data.content === undefined ? existing.content : data.content;
-  const nextContentText =
-    data.content === undefined
-      ? existing.contentText
-      : extractContentText(data.content);
 
   if (nextParentId !== existing.parentId) {
     await assertParent(workspaceId, nextParentId, documentId);
   }
 
-  const contentChanged = !sameJson(existing.content, nextContent);
   const titleChanged = nextTitle !== existing.title;
   const parentChanged = nextParentId !== existing.parentId;
 
-  if (!contentChanged && !titleChanged && !parentChanged) {
+  if (!titleChanged && !parentChanged) {
     return existing;
   }
 
-  const shouldSnapshot = contentChanged || titleChanged;
+  if (existing.revision !== data.expectedRevision) {
+    throw staleWriteError();
+  }
 
   return runVersionedTransaction(() =>
     prisma.$transaction(async (tx) => {
-    const document = await tx.document.update({
-      where: { id: documentId },
-      data: {
-        title: nextTitle,
-        parentId: nextParentId,
-        content: nextContent as Prisma.InputJsonValue,
-        contentText: nextContentText,
-        updatedById: userId,
-      },
-      include: documentInclude,
-    });
+      const updated = await tx.document.updateMany({
+        where: {
+          id: documentId,
+          workspaceId,
+          revision: data.expectedRevision,
+        },
+        data: {
+          title: nextTitle,
+          parentId: nextParentId,
+          updatedById: userId,
+          revision: { increment: 1 },
+        },
+      });
 
-    if (shouldSnapshot) {
+      if (updated.count === 0) {
+        throw staleWriteError();
+      }
+
+      const document = await tx.document.findUniqueOrThrow({
+        where: { id: documentId },
+        include: documentInclude,
+      });
+
+      if (titleChanged) {
+        await createVersion(tx, {
+          documentId,
+          title: document.title,
+          content: document.content as Prisma.InputJsonValue,
+          contentText: document.contentText,
+          authorId: userId,
+          changeSummary: "Renamed document",
+        });
+      }
+
+      return document;
+    })
+  );
+}
+
+async function captureSynchronizedContent(
+  documentId: number,
+  generation: number,
+  fallbackContent: unknown
+) {
+  const live = getLoadedCollaborationDoc(documentId, generation);
+  if (live) {
+    return ydocToTiptapJson(live);
+  }
+
+  const stored = await prisma.documentCollaborationState.findUnique({
+    where: { documentId },
+  });
+
+  if (stored && stored.generation === generation) {
+    return yjsStateToTiptapJson(new Uint8Array(stored.yjsState));
+  }
+
+  return fallbackContent ?? EMPTY_DOC_CONTENT;
+}
+
+export async function checkpointDocument(
+  workspaceId: number,
+  documentId: number,
+  userId: number,
+  changeSummary?: string
+) {
+  const existing = await getDocument(workspaceId, documentId);
+
+  if (!existing) {
+    throw new DocumentServiceError("Document not found", 404);
+  }
+
+  const content = await captureSynchronizedContent(
+    documentId,
+    existing.collaborationGeneration,
+    existing.content
+  );
+  const contentText = extractContentText(content);
+
+  if (
+    sameJson(existing.content, content) &&
+    existing.contentText === contentText
+  ) {
+    return existing;
+  }
+
+  return runVersionedTransaction(() =>
+    prisma.$transaction(async (tx) => {
+      const document = await tx.document.update({
+        where: { id: documentId },
+        data: {
+          content: content as Prisma.InputJsonValue,
+          contentText,
+          updatedById: userId,
+          revision: { increment: 1 },
+        },
+        include: documentInclude,
+      });
+
       await createVersion(tx, {
         documentId,
         title: document.title,
         content: document.content as Prisma.InputJsonValue,
         contentText: document.contentText,
         authorId: userId,
-        changeSummary:
-          data.changeSummary ??
-          (titleChanged && contentChanged
-            ? "Updated title and content"
-            : titleChanged
-              ? "Renamed document"
-              : "Updated content"),
+        changeSummary: changeSummary ?? "Checkpoint",
       });
-    }
 
-    return document;
-  })
+      return document;
+    })
   );
 }
 
@@ -370,6 +460,12 @@ export async function deleteDocument(workspaceId: number, documentId: number) {
       409
     );
   }
+
+  notifyCollaborationDocument(documentId, existing.collaborationGeneration, {
+    type: "document:deleted",
+    documentId,
+  });
+  closeCollaborationDocument(documentId, existing.collaborationGeneration);
 
   await prisma.document.delete({
     where: { id: documentId },
@@ -439,35 +535,56 @@ export async function restoreDocumentVersion(
   versionId: number,
   userId: number
 ) {
-  const version = await getDocumentVersion(
-    workspaceId,
-    documentId,
-    versionId
-  );
+  const version = await getDocumentVersion(workspaceId, documentId, versionId);
+  const existing = await getDocument(workspaceId, documentId);
 
-  return runVersionedTransaction(() =>
+  if (!existing) {
+    throw new DocumentServiceError("Document not found", 404);
+  }
+
+  const previousGeneration = existing.collaborationGeneration;
+
+  const document = await runVersionedTransaction(() =>
     prisma.$transaction(async (tx) => {
-    const document = await tx.document.update({
-      where: { id: documentId },
-      data: {
-        title: version.title,
-        content: version.content as Prisma.InputJsonValue,
-        contentText: version.contentText,
-        updatedById: userId,
-      },
-      include: documentInclude,
-    });
+      const restored = await tx.document.update({
+        where: { id: documentId },
+        data: {
+          title: version.title,
+          content: version.content as Prisma.InputJsonValue,
+          contentText: version.contentText,
+          updatedById: userId,
+          revision: { increment: 1 },
+          collaborationGeneration: { increment: 1 },
+        },
+        include: documentInclude,
+      });
 
-    await createVersion(tx, {
-      documentId,
-      title: document.title,
-      content: document.content as Prisma.InputJsonValue,
-      contentText: document.contentText,
-      authorId: userId,
-      changeSummary: `Restored from version ${version.versionNumber}`,
-    });
+      await createVersion(tx, {
+        documentId,
+        title: restored.title,
+        content: restored.content as Prisma.InputJsonValue,
+        contentText: restored.contentText,
+        authorId: userId,
+        changeSummary: `Restored from version ${version.versionNumber}`,
+      });
 
-    return document;
-  })
+      return restored;
+    })
   );
+
+  await replaceYjsState(
+    documentId,
+    document.collaborationGeneration,
+    document.content
+  );
+
+  notifyCollaborationDocument(documentId, previousGeneration, {
+    type: "document:restored",
+    documentId,
+    generation: document.collaborationGeneration,
+    revision: document.revision,
+  });
+  closeCollaborationDocument(documentId, previousGeneration);
+
+  return document;
 }

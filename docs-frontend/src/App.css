@@ -199,6 +199,56 @@ select,
   padding: 10px 0;
 }
 
+.live-status {
+  font-size: 12px;
+  color: #5e6c84;
+  white-space: nowrap;
+}
+
+.live-status.ok {
+  color: #006644;
+}
+
+.live-status.err {
+  color: #de350b;
+}
+
+.presence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.presence-chip {
+  color: #fff;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collaboration-carets__caret {
+  border-left: 2px solid currentColor;
+  margin-left: -1px;
+  pointer-events: none;
+  position: relative;
+  word-break: normal;
+}
+
+.collaboration-carets__label {
+  position: absolute;
+  top: -1.4em;
+  left: -1px;
+  font-size: 11px;
+  color: #fff;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
 @media (max-width: 980px) {
   .docs-layout {
     grid-template-columns: 1fr;

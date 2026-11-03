@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import {
   DocumentServiceError,
+  checkpointDocument,
   createDocument,
   deleteDocument,
   getDocument,
@@ -110,8 +111,7 @@ export async function updateDocumentController(req: Request, res: Response) {
       {
         title: req.body.title,
         parentId: req.body.parentId,
-        content: req.body.content,
-        changeSummary: req.body.changeSummary,
+        expectedRevision: req.body.expectedRevision,
       }
     );
 
@@ -121,6 +121,34 @@ export async function updateDocumentController(req: Request, res: Response) {
     });
   } catch (error) {
     return handleError(error, res, "Failed to update document");
+  }
+}
+
+export async function checkpointDocumentController(
+  req: Request,
+  res: Response
+) {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const document = await checkpointDocument(
+      Number(req.params.workspaceId),
+      Number(req.params.documentId),
+      req.user.id,
+      req.body.changeSummary
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: document,
+    });
+  } catch (error) {
+    return handleError(error, res, "Failed to checkpoint document");
   }
 }
 

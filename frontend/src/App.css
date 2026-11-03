@@ -78,10 +78,18 @@
   border-color: #0052cc;
 }
 
-.banner.error {
+.banner {
   margin: 12px 20px 0;
   padding: 10px 12px;
   border-radius: 6px;
+  background: #fff0b3;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.banner.error {
   background: #ffebe6;
   color: #bf2600;
 }

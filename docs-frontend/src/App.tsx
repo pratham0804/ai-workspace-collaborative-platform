@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Callback from "./auth/Callback";
 import { loginWithSSO, logoutDocs } from "./auth/login";
+import CollaborativeEditor, {
+  type CollabStatus,
+  type PresenceUser,
+} from "./components/CollaborativeEditor";
 import DocumentEditor from "./components/DocumentEditor";
 import DocumentTree from "./components/DocumentTree";
 import VersionHistory from "./components/VersionHistory";
+import { isConflictError } from "./services/api";
 import { documentApi, workspaceApi } from "./services/docsApi";
 import {
   buildDocumentTree,
@@ -22,7 +27,6 @@ function DocsApp() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [current, setCurrent] = useState<DocumentRecord | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
-  const [draftContent, setDraftContent] = useState<unknown>(null);
   const [versions, setVersions] = useState<DocumentVersionSummary[]>([]);
   const [historical, setHistorical] = useState<DocumentVersionRecord | null>(
     null
@@ -34,14 +38,15 @@ function DocsApp() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [conflict, setConflict] = useState("");
+  const [notice, setNotice] = useState("");
   const [showHistory, setShowHistory] = useState(true);
+  const [collabStatus, setCollabStatus] = useState<CollabStatus>("disconnected");
+  const [synced, setSynced] = useState(false);
+  const [collaborators, setCollaborators] = useState<PresenceUser[]>([]);
 
   const tree = useMemo(() => buildDocumentTree(documents), [documents]);
-  const dirty =
-    !!current &&
-    !historical &&
-    (draftTitle !== current.title ||
-      JSON.stringify(draftContent) !== JSON.stringify(current.content));
+  const titleDirty = !!current && !historical && draftTitle !== current.title;
 
   const loadWorkspaces = useCallback(async () => {
     const list = await workspaceApi.getAll();
@@ -58,6 +63,22 @@ function DocsApp() {
     setDocuments(list);
     return list;
   }, []);
+
+  const loadSelected = useCallback(
+    async (activeWorkspaceId: number, activeDocumentId: number) => {
+      const [document, versionList] = await Promise.all([
+        documentApi.get(activeWorkspaceId, activeDocumentId),
+        documentApi.versions(activeWorkspaceId, activeDocumentId),
+      ]);
+      setCurrent(document);
+      setDraftTitle(document.title);
+      setVersions(versionList);
+      setHistorical(null);
+      setConflict("");
+      return document;
+    },
+    []
+  );
 
   useEffect(() => {
     async function boot() {
@@ -117,24 +138,16 @@ function DocsApp() {
     const activeWorkspaceId = workspaceId;
     const activeDocumentId = selectedId;
 
-    async function loadSelected() {
+    async function load() {
       try {
-        const [document, versionList] = await Promise.all([
-          documentApi.get(activeWorkspaceId, activeDocumentId),
-          documentApi.versions(activeWorkspaceId, activeDocumentId),
-        ]);
-        setCurrent(document);
-        setDraftTitle(document.title);
-        setDraftContent(document.content);
-        setVersions(versionList);
-        setHistorical(null);
+        await loadSelected(activeWorkspaceId, activeDocumentId);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to open page");
       }
     }
 
-    void loadSelected();
-  }, [workspaceId, selectedId]);
+    void load();
+  }, [workspaceId, selectedId, loadSelected]);
 
   async function handleCreate(parentId?: number | null) {
     if (!workspaceId) return;
@@ -154,22 +167,38 @@ function DocsApp() {
     }
   }
 
-  async function handleRename() {
+  async function saveTitle(nextTitle: string) {
     if (!workspaceId || !current) return;
-    const title = window.prompt("Rename page", current.title);
-    if (!title?.trim() || title.trim() === current.title) return;
+    setSaving(true);
+    setError("");
+    setConflict("");
 
     try {
       const document = await documentApi.update(workspaceId, current.id, {
-        title: title.trim(),
+        title: nextTitle.trim() || current.title,
+        expectedRevision: current.revision,
       });
       setCurrent(document);
       setDraftTitle(document.title);
       await loadDocuments(workspaceId);
       setVersions(await documentApi.versions(workspaceId, current.id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to rename page");
+      if (isConflictError(err)) {
+        setConflict(err.message);
+        await loadSelected(workspaceId, current.id);
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to save title");
+      }
+    } finally {
+      setSaving(false);
     }
+  }
+
+  async function handleRename() {
+    if (!current) return;
+    const title = window.prompt("Rename page", current.title);
+    if (!title?.trim() || title.trim() === current.title) return;
+    await saveTitle(title);
   }
 
   async function handleDelete() {
@@ -187,23 +216,20 @@ function DocsApp() {
     }
   }
 
-  async function handleSave() {
-    if (!workspaceId || !current || !dirty) return;
+  async function handleCheckpoint() {
+    if (!workspaceId || !current || !synced) return;
     setSaving(true);
     setError("");
 
     try {
-      const document = await documentApi.update(workspaceId, current.id, {
-        title: draftTitle.trim() || current.title,
-        content: draftContent,
-      });
+      const document = await documentApi.checkpoint(workspaceId, current.id);
       setCurrent(document);
       setDraftTitle(document.title);
-      setDraftContent(document.content);
       await loadDocuments(workspaceId);
       setVersions(await documentApi.versions(workspaceId, current.id));
+      setNotice("Version checkpoint saved from live collaborative content.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save page");
+      setError(err instanceof Error ? err.message : "Failed to checkpoint");
     } finally {
       setSaving(false);
     }
@@ -231,7 +257,6 @@ function DocsApp() {
     if (latest && latest.id === versionId) {
       setHistorical(null);
       setDraftTitle(current.title);
-      setDraftContent(current.content);
       return;
     }
 
@@ -249,7 +274,7 @@ function DocsApp() {
 
   async function handleRestore(versionId: number) {
     if (!workspaceId || !current) return;
-    if (!window.confirm("Restore this version? A new version will be created.")) {
+    if (!window.confirm("Restore this version? Connected editors will reload the restored content.")) {
       return;
     }
 
@@ -261,8 +286,8 @@ function DocsApp() {
       );
       setCurrent(document);
       setDraftTitle(document.title);
-      setDraftContent(document.content);
       setHistorical(null);
+      setNotice("Document restored. Collaborative editors will reload.");
       await loadDocuments(workspaceId);
       setVersions(await documentApi.versions(workspaceId, current.id));
     } catch (err) {
@@ -270,8 +295,51 @@ function DocsApp() {
     }
   }
 
-  const editorContent = historical ? historical.content : draftContent;
+  const handleAuthFailed = useCallback(
+    (reason: string) => {
+      if (!workspaceId || !selectedId) {
+        setError(reason);
+        return;
+      }
+
+      if (/expired|token/i.test(reason)) {
+        setError("Session expired. Sign in again.");
+        return;
+      }
+
+      if (/stale|restored|not found|deleted/i.test(reason)) {
+        setNotice("Collaboration session refreshed after a restore or permission change.");
+        void loadSelected(workspaceId, selectedId).catch((err: unknown) => {
+          setError(err instanceof Error ? err.message : "Failed to reload page");
+          setSelectedId(null);
+        });
+        return;
+      }
+
+      setError(reason);
+    },
+    [loadSelected, selectedId, workspaceId]
+  );
+
+  const handleRestored = useCallback(
+    (_nextGeneration: number) => {
+      if (!workspaceId || !selectedId) return;
+      setNotice("Another user restored an older version. Reloading live content.");
+      void loadSelected(workspaceId, selectedId);
+    },
+    [loadSelected, selectedId, workspaceId]
+  );
+
   const editorTitle = historical ? historical.title : draftTitle;
+  const statusLabel = !historical
+    ? collabStatus === "connected"
+      ? synced
+        ? "Live"
+        : "Syncing"
+      : collabStatus === "connecting"
+        ? "Reconnecting"
+        : "Disconnected"
+    : "Read-only";
 
   return (
     <div className="docs-shell">
@@ -301,6 +369,13 @@ function DocsApp() {
             value={search}
             onChange={(event) => void handleSearch(event.target.value)}
           />
+          <span
+            className={`live-status ${
+              collabStatus === "connected" && synced ? "ok" : "err"
+            }`}
+          >
+            {statusLabel}
+          </span>
           <button type="button" onClick={logoutDocs}>
             Log out
           </button>
@@ -308,6 +383,30 @@ function DocsApp() {
       </header>
 
       {error && <div className="banner error">{error}</div>}
+      {conflict && (
+        <div className="banner error">
+          <span>{conflict}</span>
+          {workspaceId && current && (
+            <button
+              type="button"
+              onClick={() => {
+                setConflict("");
+                void loadSelected(workspaceId, current.id);
+              }}
+            >
+              Refresh page
+            </button>
+          )}
+        </div>
+      )}
+      {notice && (
+        <div className="banner">
+          <span>{notice}</span>
+          <button type="button" onClick={() => setNotice("")}>
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <p className="muted padded">Loading...</p>
@@ -370,23 +469,43 @@ function DocsApp() {
                         Viewing v{historical.versionNumber}
                       </span>
                     )}
+                    <div className="presence">
+                      {collaborators.map((person) => (
+                        <span
+                          key={person.clientId}
+                          className="presence-chip"
+                          style={{ background: person.color }}
+                          title={person.name}
+                        >
+                          {person.name}
+                        </span>
+                      ))}
+                    </div>
                     <span className="muted">
                       {saving
                         ? "Saving..."
-                        : dirty
-                          ? "Unsaved changes"
-                          : "Saved"}
+                        : titleDirty
+                          ? "Unsaved title"
+                          : "Title saved"}
                     </span>
-                    <button type="button" onClick={handleRename}>
+                    <button type="button" onClick={() => void handleRename()}>
                       Rename
                     </button>
                     <button
                       type="button"
                       className="primary"
-                      disabled={!dirty || !!historical || saving}
-                      onClick={() => void handleSave()}
+                      disabled={!titleDirty || !!historical || saving}
+                      onClick={() => void saveTitle(draftTitle)}
                     >
-                      Save
+                      Save title
+                    </button>
+                    <button
+                      type="button"
+                      className="primary"
+                      disabled={!!historical || saving || !synced}
+                      onClick={() => void handleCheckpoint()}
+                    >
+                      Checkpoint
                     </button>
                     <button type="button" onClick={() => setShowHistory((v) => !v)}>
                       History
@@ -404,12 +523,24 @@ function DocsApp() {
                     </button>
                   </div>
                 )}
-                <DocumentEditor
-                  key={`${current.id}-${historical?.id ?? "current"}`}
-                  content={editorContent}
-                  readOnly={!!historical}
-                  onChange={setDraftContent}
-                />
+                {historical ? (
+                  <DocumentEditor
+                    key={`${current.id}-v${historical.id}`}
+                    content={historical.content}
+                    readOnly
+                  />
+                ) : (
+                  <CollaborativeEditor
+                    key={`${current.id}-g${current.collaborationGeneration}`}
+                    documentId={current.id}
+                    generation={current.collaborationGeneration}
+                    onStatus={setCollabStatus}
+                    onSynced={setSynced}
+                    onUsers={setCollaborators}
+                    onAuthFailed={handleAuthFailed}
+                    onRestored={handleRestored}
+                  />
+                )}
               </>
             )}
           </main>

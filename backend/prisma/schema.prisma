@@ -148,6 +148,7 @@ model Task {
   position Int
 
   priority String @default("MEDIUM")
+  revision Int    @default(1)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -211,6 +212,8 @@ model Document {
   parentId    Int?
   createdById Int
   updatedById Int
+  revision                 Int @default(1)
+  collaborationGeneration  Int @default(1)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -222,7 +225,8 @@ model Document {
   createdBy User @relation("DocumentCreatedBy", fields: [createdById], references: [id])
   updatedBy User @relation("DocumentUpdatedBy", fields: [updatedById], references: [id])
 
-  versions DocumentVersion[]
+  versions           DocumentVersion[]
+  collaborationState DocumentCollaborationState?
 
   @@index([workspaceId])
   @@index([parentId])
@@ -250,4 +254,13 @@ model DocumentVersion {
   @@index([documentId])
   @@index([authorId])
   @@index([createdAt])
+}
+
+model DocumentCollaborationState {
+  documentId Int      @id
+  yjsState   Bytes
+  generation Int      @default(1)
+  updatedAt  DateTime @updatedAt
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 }

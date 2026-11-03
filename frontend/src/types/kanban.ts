@@ -31,6 +31,7 @@ export interface Task {
   columnId: number;
   position: number;
   priority: "LOW" | "MEDIUM" | "HIGH";
+  revision: number;
   createdAt: string;
   updatedAt: string;
 }

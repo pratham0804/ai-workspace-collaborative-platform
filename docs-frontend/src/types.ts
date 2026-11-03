@@ -9,6 +9,8 @@ export interface DocumentSummary {
   title: string;
   parentId: number | null;
   workspaceId: number;
+  revision?: number;
+  collaborationGeneration?: number;
   updatedAt: string;
   createdAt?: string;
   contentText?: string;
@@ -17,6 +19,8 @@ export interface DocumentSummary {
 export interface DocumentRecord extends DocumentSummary {
   content: unknown;
   contentText: string;
+  revision: number;
+  collaborationGeneration: number;
   createdBy?: { id: number; name: string; email: string };
   updatedBy?: { id: number; name: string; email: string };
 }

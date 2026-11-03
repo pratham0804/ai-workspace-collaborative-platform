@@ -11,7 +11,8 @@ export function broadcastBoardEvent<T>(
   workspaceId: number,
   boardId: number,
   actorId: number,
-  data: T
+  data: T,
+  revision?: number
 ) {
   const io = getIO();
 
@@ -29,6 +30,10 @@ export function broadcastBoardEvent<T>(
     timestamp: new Date().toISOString(),
     data,
   };
+
+  if (revision !== undefined) {
+    event.revision = revision;
+  }
 
   io.to(boardRoom(boardId)).emit(type, event);
 }

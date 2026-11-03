@@ -207,6 +207,7 @@ export const taskApi = {
       title?: string;
       description?: string;
       priority?: "LOW" | "MEDIUM" | "HIGH";
+      expectedRevision: number;
     }
   ) {
     const response = await api.patch<ApiResponse<Task>>(
@@ -234,13 +235,15 @@ export const taskApi = {
     sourceColumnId: number,
     taskId: number,
     targetColumnId: number,
-    targetPosition: number
+    targetPosition: number,
+    expectedRevision: number
   ) {
     const response = await api.patch<ApiResponse<Task>>(
       `/workspaces/${workspaceId}/boards/${boardId}/columns/${sourceColumnId}/tasks/${taskId}/move`,
       {
         targetColumnId,
         targetPosition,
+        expectedRevision,
       }
     );
 

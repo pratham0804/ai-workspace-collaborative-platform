@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  checkpointDocumentController,
   createDocumentController,
   deleteDocumentController,
   getDocumentController,
@@ -16,6 +17,7 @@ import {
 } from "../middleware/workspace.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
 import {
+  checkpointDocumentSchema,
   createDocumentSchema,
   updateDocumentSchema,
 } from "../utils/validation.js";
@@ -86,6 +88,15 @@ router.patch(
   requireWorkspaceMember,
   validate(updateDocumentSchema),
   updateDocumentController
+);
+
+router.post(
+  "/workspaces/:workspaceId/documents/:documentId/checkpoint",
+  documentIds,
+  authMiddleware,
+  requireWorkspaceMember,
+  validate(checkpointDocumentSchema),
+  checkpointDocumentController
 );
 
 router.delete(

@@ -56,13 +56,24 @@ export const documentApi = {
     data: {
       title?: string;
       parentId?: number | null;
-      content?: unknown;
-      changeSummary?: string;
+      expectedRevision: number;
     }
   ) {
     const response = await api.patch<ApiResponse<DocumentRecord>>(
       `/workspaces/${workspaceId}/documents/${documentId}`,
       data
+    );
+    return response.data;
+  },
+
+  async checkpoint(
+    workspaceId: number,
+    documentId: number,
+    changeSummary?: string
+  ) {
+    const response = await api.post<ApiResponse<DocumentRecord>>(
+      `/workspaces/${workspaceId}/documents/${documentId}/checkpoint`,
+      changeSummary ? { changeSummary } : {}
     );
     return response.data;
   },

@@ -1,5 +1,18 @@
 const API_URL = "http://localhost:5000/api";
 
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+export function isConflictError(error: unknown): error is ApiError {
+  return error instanceof ApiError && error.status === 409;
+}
+
 function getToken() {
   return sessionStorage.getItem("access_token");
 }
@@ -25,7 +38,7 @@ async function request<T>(
     headers,
   });
 
-  let body: any = null;
+  let body: { message?: string; error?: string } | null = null;
 
   try {
     body = await response.json();
@@ -34,14 +47,15 @@ async function request<T>(
   }
 
   if (!response.ok) {
-    throw new Error(
+    throw new ApiError(
       body?.message ||
         body?.error ||
-        `Request failed with status ${response.status}`
+        `Request failed with status ${response.status}`,
+      response.status
     );
   }
 
-  return body;
+  return body as T;
 }
 
 export const api = {

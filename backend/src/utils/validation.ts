@@ -76,12 +76,15 @@ export const updateTaskSchema = z.object({
   priority: z
     .enum(["LOW", "MEDIUM", "HIGH"])
     .optional(),
+
+  expectedRevision: z.number().int().positive(),
 });
 
 
 export const moveTaskSchema = z.object({
   targetColumnId: z.number().int().positive("Invalid target column ID"),
   targetPosition: z.number().int().min(0, "Position cannot be negative"),
+  expectedRevision: z.number().int().positive(),
 });
 
 export const createCommentSchema = z.object({
@@ -114,7 +117,10 @@ export const updateDocumentSchema = z.object({
     .max(200, "Document title cannot exceed 200 characters")
     .optional(),
   parentId: z.number().int().positive().nullable().optional(),
-  content: z.unknown().optional(),
+  expectedRevision: z.number().int().positive(),
+});
+
+export const checkpointDocumentSchema = z.object({
   changeSummary: z
     .string()
     .max(300, "Change summary cannot exceed 300 characters")
