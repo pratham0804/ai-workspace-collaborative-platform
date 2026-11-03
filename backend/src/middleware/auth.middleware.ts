@@ -67,6 +67,13 @@ export async function authMiddleware(
       where: {
         id: userId,
       },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
 
     if (!user) {

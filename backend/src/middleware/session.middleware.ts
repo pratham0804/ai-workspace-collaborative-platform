@@ -9,9 +9,7 @@ export async function sessionMiddleware(
 ) {
 
 
-  console.log("SESSION MIDDLEWARE HIT:", req.method, req.originalUrl);
   try {
-    console.log("SESSION COOKIE:", req.cookies?.idp_session);
     const sessionToken = req.cookies?.idp_session;
     if (!sessionToken) {
       return next();
@@ -27,7 +25,15 @@ export async function sessionMiddleware(
         tokenHash,
       },
       include: {
-        user: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
       },
     });
 

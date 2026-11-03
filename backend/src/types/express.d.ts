@@ -1,13 +1,13 @@
-import { User, type WorkspaceMember } from "@prisma/client";
+import type { User, WorkspaceMember } from "@prisma/client";
 
+export type AuthUser = Omit<User, "passwordHash">;
 
 declare global {
   namespace Express {
     interface Request {
-      user?: User;
+      user?: AuthUser;
       auth?: string | object;
-      workspaceMembership? : WorkspaceMember;
-      
+      workspaceMembership?: WorkspaceMember;
     }
   }
 }

@@ -7,29 +7,6 @@ import {
   removeWorkspaceMember,
 } from "../services/workspace-member.service.js";
 
-async function requireAdminOrOwner(
-  workspaceId: number,
-  userId: number
-) {
-  const membership = await prisma.workspaceMember.findUnique({
-    where: {
-      workspaceId_userId: {
-        workspaceId,
-        userId,
-      },
-    },
-  });
-
-  if (
-    !membership ||
-    (membership.role !== "OWNER" && membership.role !== "ADMIN")
-  ) {
-    return null;
-  }
-
-  return membership;
-}
-
 export async function getWorkspaceMembersController(
   req: Request,
   res: Response
@@ -66,16 +43,19 @@ export async function addWorkspaceMemberController(
     }
 
     const workspaceId = Number(req.params.workspaceId);
-
-    const membership = await requireAdminOrOwner(
-      workspaceId,
-      req.user.id
-    );
+    const membership = req.workspaceMembership;
 
     if (!membership) {
       return res.status(403).json({
         success: false,
         message: "Only workspace owners and admins can add members",
+      });
+    }
+
+    if (req.body.role === "ADMIN" && membership.role !== "OWNER") {
+      return res.status(403).json({
+        success: false,
+        message: "Only workspace owners can assign the admin role",
       });
     }
 
@@ -126,11 +106,7 @@ export async function updateWorkspaceMemberController(
 
     const workspaceId = Number(req.params.workspaceId);
     const userId = Number(req.params.userId);
-
-    const membership = await requireAdminOrOwner(
-      workspaceId,
-      req.user.id
-    );
+    const membership = req.workspaceMembership;
 
     if (!membership) {
       return res.status(403).json({
@@ -159,6 +135,20 @@ export async function updateWorkspaceMemberController(
       return res.status(403).json({
         success: false,
         message: "Owner role cannot be changed",
+      });
+    }
+
+    if (target.role === "ADMIN" && membership.role !== "OWNER") {
+      return res.status(403).json({
+        success: false,
+        message: "Only workspace owners can change admin members",
+      });
+    }
+
+    if (req.body.role === "ADMIN" && membership.role !== "OWNER") {
+      return res.status(403).json({
+        success: false,
+        message: "Only workspace owners can assign the admin role",
       });
     }
 
@@ -203,11 +193,7 @@ export async function removeWorkspaceMemberController(
 
     const workspaceId = Number(req.params.workspaceId);
     const userId = Number(req.params.userId);
-
-    const membership = await requireAdminOrOwner(
-      workspaceId,
-      req.user.id
-    );
+    const membership = req.workspaceMembership;
 
     if (!membership) {
       return res.status(403).json({
@@ -236,6 +222,13 @@ export async function removeWorkspaceMemberController(
       return res.status(403).json({
         success: false,
         message: "Workspace owner cannot be removed",
+      });
+    }
+
+    if (target.role === "ADMIN" && membership.role !== "OWNER") {
+      return res.status(403).json({
+        success: false,
+        message: "Only workspace owners can remove admin members",
       });
     }
 

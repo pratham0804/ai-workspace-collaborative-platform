@@ -119,8 +119,23 @@ export async function deleteCommentController(
       });
     }
 
+    const task = await validateTaskHierarchy(
+      Number(req.params.workspaceId),
+      Number(req.params.boardId),
+      Number(req.params.columnId),
+      Number(req.params.taskId)
+    );
+
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found",
+      });
+    }
+
     const result = await deleteComment(
       Number(req.params.commentId),
+      task.id,
       req.user.id
     );
 

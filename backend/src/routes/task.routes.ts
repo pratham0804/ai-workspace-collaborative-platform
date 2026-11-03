@@ -13,6 +13,7 @@ import {
 import { authMiddleware } from "../middleware/auth.middleware.js";
 
 import {
+  requireIntegerParams,
   requireWorkspaceMember,
 } from "../middleware/workspace.middleware.js";
 
@@ -26,8 +27,21 @@ import {
 
 const router = Router();
 
+const columnIds = requireIntegerParams(
+  "workspaceId",
+  "boardId",
+  "columnId"
+);
+const taskIds = requireIntegerParams(
+  "workspaceId",
+  "boardId",
+  "columnId",
+  "taskId"
+);
+
 router.post(
   "/workspaces/:workspaceId/boards/:boardId/columns/:columnId/tasks",
+  columnIds,
   authMiddleware,
   requireWorkspaceMember,
   validate(createTaskSchema),
@@ -36,6 +50,7 @@ router.post(
 
 router.get(
   "/workspaces/:workspaceId/boards/:boardId/columns/:columnId/tasks",
+  columnIds,
   authMiddleware,
   requireWorkspaceMember,
   getColumnTasksController
@@ -43,6 +58,7 @@ router.get(
 
 router.get(
   "/workspaces/:workspaceId/boards/:boardId/columns/:columnId/tasks/:taskId",
+  taskIds,
   authMiddleware,
   requireWorkspaceMember,
   getTaskController
@@ -50,6 +66,7 @@ router.get(
 
 router.patch(
   "/workspaces/:workspaceId/boards/:boardId/columns/:columnId/tasks/:taskId/move",
+  taskIds,
   authMiddleware,
   requireWorkspaceMember,
   validate(moveTaskSchema),
@@ -58,6 +75,7 @@ router.patch(
 
 router.patch(
   "/workspaces/:workspaceId/boards/:boardId/columns/:columnId/tasks/:taskId",
+  taskIds,
   authMiddleware,
   requireWorkspaceMember,
   validate(updateTaskSchema),
@@ -66,6 +84,7 @@ router.patch(
 
 router.delete(
   "/workspaces/:workspaceId/boards/:boardId/columns/:columnId/tasks/:taskId",
+  taskIds,
   authMiddleware,
   requireWorkspaceMember,
   deleteTaskController
@@ -73,6 +92,7 @@ router.delete(
 
 router.get(
   "/workspaces/:workspaceId/boards/:boardId/columns/:columnId/tasks/:taskId/history",
+  taskIds,
   authMiddleware,
   requireWorkspaceMember,
   getTaskHistoryController

@@ -11,7 +11,9 @@ import {
 import { authMiddleware } from "../middleware/auth.middleware.js";
 
 import {
+  requireIntegerParams,
   requireWorkspaceMember,
+  requireWorkspaceAdmin,
 } from "../middleware/workspace.middleware.js";
 
 import { validate } from "../middleware/validate.middleware.js";
@@ -23,8 +25,16 @@ import {
 
 const router = Router();
 
+const boardIds = requireIntegerParams("workspaceId", "boardId");
+const columnIds = requireIntegerParams(
+  "workspaceId",
+  "boardId",
+  "columnId"
+);
+
 router.post(
   "/workspaces/:workspaceId/boards/:boardId/columns",
+  boardIds,
   authMiddleware,
   requireWorkspaceMember,
   validate(createColumnSchema),
@@ -33,6 +43,7 @@ router.post(
 
 router.get(
   "/workspaces/:workspaceId/boards/:boardId/columns",
+  boardIds,
   authMiddleware,
   requireWorkspaceMember,
   getBoardColumnsController
@@ -40,6 +51,7 @@ router.get(
 
 router.get(
   "/workspaces/:workspaceId/boards/:boardId/columns/:columnId",
+  columnIds,
   authMiddleware,
   requireWorkspaceMember,
   getColumnController
@@ -47,6 +59,7 @@ router.get(
 
 router.patch(
   "/workspaces/:workspaceId/boards/:boardId/columns/:columnId",
+  columnIds,
   authMiddleware,
   requireWorkspaceMember,
   validate(updateColumnSchema),
@@ -55,8 +68,10 @@ router.patch(
 
 router.delete(
   "/workspaces/:workspaceId/boards/:boardId/columns/:columnId",
+  columnIds,
   authMiddleware,
   requireWorkspaceMember,
+  requireWorkspaceAdmin,
   deleteColumnController
 );
 

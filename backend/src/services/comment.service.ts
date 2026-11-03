@@ -45,11 +45,13 @@ export async function getTaskComments(taskId: number) {
 
 export async function deleteComment(
   commentId: number,
+  taskId: number,
   userId: number
 ) {
   return prisma.comment.deleteMany({
     where: {
       id: commentId,
+      taskId,
       userId,
     },
   });

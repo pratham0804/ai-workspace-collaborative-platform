@@ -1,29 +1,48 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../config/prisma.js";
 
 export async function createColumn(
   name: string,
   boardId: number
 ) {
-  const lastColumn = await prisma.column.findFirst({
-    where: {
-      boardId,
-    },
-    orderBy: {
-      position: "desc",
-    },
-  });
+  const maxAttempts = 3;
 
-  const position = lastColumn
-    ? lastColumn.position + 1
-    : 0;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const lastColumn = await tx.column.findFirst({
+          where: {
+            boardId,
+          },
+          orderBy: {
+            position: "desc",
+          },
+        });
 
-  return prisma.column.create({
-    data: {
-      name,
-      boardId,
-      position,
-    },
-  });
+        const position = lastColumn
+          ? lastColumn.position + 1
+          : 0;
+
+        return tx.column.create({
+          data: {
+            name,
+            boardId,
+            position,
+          },
+        });
+      });
+    } catch (error) {
+      const isUniqueConflict =
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002";
+
+      if (!isUniqueConflict || attempt === maxAttempts - 1) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error("Failed to create column");
 }
 
 export async function getBoardColumns(

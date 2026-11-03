@@ -53,19 +53,12 @@ export async function login(
     );
 
     res.cookie("idp_session", result.session.sessionToken, {
-  httpOnly: true,
-  secure: false,
-  sameSite: "lax",
-  path: "/",
-  expires: result.session.expiresAt,
-});
-
-console.log(
-  "LOGIN CREATED SESSION:",
-  result.session.sessionToken
-);
-
-
+      httpOnly: true,
+      secure: false,
+      sameSite: "lax",
+      path: "/",
+      expires: result.session.expiresAt,
+    });
 
     if (
       typeof return_to === "string" &&

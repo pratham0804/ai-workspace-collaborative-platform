@@ -249,9 +249,9 @@ export async function updateTaskController(
     );
 
     if (!result) {
-      return res.status(500).json({
+      return res.status(404).json({
         success: false,
-        message: "Failed to update task",
+        message: "Task not found",
       });
     }
 

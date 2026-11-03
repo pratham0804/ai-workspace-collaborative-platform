@@ -73,6 +73,9 @@ export async function updateWorkspaceMemberRole(
     where: {
       workspaceId,
       userId,
+      role: {
+        not: "OWNER",
+      },
     },
     data: {
       role,
@@ -88,6 +91,9 @@ export async function removeWorkspaceMember(
     where: {
       workspaceId,
       userId,
+      role: {
+        not: "OWNER",
+      },
     },
   });
 }
